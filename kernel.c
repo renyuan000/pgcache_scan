@@ -97,7 +97,6 @@ static void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg)
     struct inode *inode = NULL;
     pgcount_node_t *pgc = NULL;
     struct dentry *de   = NULL;
-    char buf[PATH_MAX] = {0}, *ptr = buf, *res = NULL;
    
     spin_lock(inode_sb_list_lock);
     list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
