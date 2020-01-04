@@ -13,9 +13,6 @@ use:
     make unload
 
 advanced use:    
-    make load
-
-    dmesg
 
     echo 0 > /proc/sys/vm/pgcache_scan/pagecache_scan_mode
        or
