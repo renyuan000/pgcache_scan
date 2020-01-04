@@ -14,18 +14,18 @@ use:
 
 advanced use:    
 
-    echo 0 > /proc/sys/vm/pgcache_scan/pagecache_scan_mode
+    echo 0 > /proc/sys/vm/pgcache_scan/pgcache_scan_mode
        or
-    echo 1 > /proc/sys/vm/pgcache_scan/pagecache_scan_mode
+    echo 1 > /proc/sys/vm/pgcache_scan/pgcache_scan_mode
        or
-    echo 2 > /proc/sys/vm/pgcache_scan/pagecache_scan_mode
+    echo 2 > /proc/sys/vm/pgcache_scan/pgcache_scan_mode
     notice: 0 is default
 
-    echo 10 > /proc/sys/vm/pgcache_scan/pagecache_scan_top_n
+    echo 10 > /proc/sys/vm/pgcache_scan/pgcache_scan_top_n
        or
-    echo 20 > /proc/sys/vm/pgcache_scan/pagecache_scan_top_n
+    echo 20 > /proc/sys/vm/pgcache_scan/pgcache_scan_top_n
        or
-    echo 50 > /proc/sys/vm/pgcache_scan/pagecache_scan_top_n
+    echo 50 > /proc/sys/vm/pgcache_scan/pgcache_scan_top_n
     ......................
 
     dmesg
