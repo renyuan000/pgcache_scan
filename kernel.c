@@ -1,3 +1,10 @@
+/*
+ * written by renyuan on 2019.12.28
+ *
+ *
+ */
+#include "include.h"
+#include "extern.h"
 #include "pgcache_scan.h"
 
 MODULE_AUTHOR("renyuan");
@@ -8,7 +15,7 @@ MODULE_LICENSE("GPL");
 /* our kernel parameter  */
 unsigned long kallsyms_lookup_name_addr = 0UL;
 module_param(kallsyms_lookup_name_addr, ulong, 0644);
-MODULE_PARM_DESC(kallsyms_lookup_name_addr, "It is for  Hooking, Because of no EXPROT_SYMBOL(kallsyms_lookup_name)");
+MODULE_PARM_DESC(kallsyms_lookup_name_addr, "It is for Hooking, Because of no EXPROT_SYMBOL(kallsyms_lookup_name)");
 
 /* Lookup the address for this symbol. Returns 0 if not found. */
 typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
@@ -22,6 +29,10 @@ extern struct task_struct init_task;
 
 
 LIST_HEAD(ordered_list);
+
+
+
+
 
 void order_list_add(pgcount_node_t *new) 
 {
@@ -95,7 +106,7 @@ void print_top_n(int n)
     printk("\n"); 
 }
 
-static void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg)
+void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg)
 {
     struct inode *inode = NULL;
     pgcount_node_t *pgc = NULL;
@@ -157,8 +168,6 @@ out:
  *	Scans the superblock list and calls given function, passing it
  *	locked superblock and given argument.
  */
-typedef void (*iterate_supers_addr)(void (*f)(struct super_block *, void *), void *arg);
-static iterate_supers_addr iterate_supers_function;
 
 static int count_open_files(struct fdtable *fdt)
 {
@@ -246,11 +255,48 @@ int scan_process_inodes_pagecache(void)
     return 0;
 }
 
+int scan_caches_sysctl_handler(struct ctl_table *table, int write,
+        void __user *buffer, size_t *length, loff_t *ppos)
+{
+    int ret = 0;
 
+    ret = proc_dointvec_minmax(table, write, buffer, length, ppos);
+    if (ret)
+        return ret;
+#if 0
+    printk("%s ret = %d sysctl_pgcache_scan_mode = %d\n", __FUNCTION__, ret, sysctl_pgcache_scan_mode);
+#endif
+    if (write) {
+        switch (sysctl_pgcache_scan_mode) {
+            case 0:
+                order_list_clear();
+                iterate_supers_function(scan_inodes_pagecache_one_sb, NULL);
+                scan_process_inodes_pagecache();
+                print_top_n(sysctl_pgcache_scan_top_n);
+                break;
+            case 1:
+                order_list_clear();
+                iterate_supers_function(scan_inodes_pagecache_one_sb, NULL);
+                print_top_n(sysctl_pgcache_scan_top_n);
+                break;
+            case 2:
+                order_list_clear();
+                scan_process_inodes_pagecache();
+                print_top_n(sysctl_pgcache_scan_top_n);
+                break;
+            default:
+                break;
+        }
+    }
 
-/* Lookup the address for this symbol. Returns 0 if not found. */
+    return 0;
+}
+
+iterate_supers_addr iterate_supers_function;
+
 kallsyms_lookup_name_t kallsyms_lookup_name_func = NULL;
 
+/* Lookup the address for this symbol. Returns 0 if not found. */
 int get_kallsyms_lookup_name_function(void)
 {
     kallsyms_lookup_name_func = (kallsyms_lookup_name_t) kallsyms_lookup_name_addr;
@@ -287,6 +333,7 @@ int get_kernel_not_export_function_and_data(void)
 
     return 0;
 }
+
 //========================================================================================
 /* kernel modules init(entry) function */
 static __init int init(void)
@@ -299,10 +346,10 @@ static __init int init(void)
     if (get_kernel_not_export_function_and_data() != 0) 
         return -1;
 
-    //iterate_supers_function(scan_inodes_pagecache_one_sb, NULL);
+    iterate_supers_function(scan_inodes_pagecache_one_sb, NULL);
     scan_process_inodes_pagecache();
     print_top_n(100);
-    //tcpspeed_sysctl_register();
+    pgcache_scan_sysctl_register();
     printk("Pgcache scan say: hello !!!\n");
     return 0;
 }
@@ -311,7 +358,7 @@ static __init int init(void)
 /* kernle modules exit function */
 static __exit void fini(void)
 {
-    //tcpspeed_sysctl_unregister();
+    pgcache_scan_sysctl_unregister();
     order_list_clear();
     printk("Pgcache say: goodbye !!!\n");
     return;
