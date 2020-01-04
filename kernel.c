@@ -81,13 +81,13 @@ void print_top_n(int n)
             kb  = (bytes - (gb * G) - (mb * M)) / K; 
             
             if (gb != 0) {
-                printk("pgscan: %4s ino: %8lu icount: %d pagecache: %8lu %4luGB,%4luMB,%4luKB pid: %8u comm: %s path: %s\n", 
+                printk("pgscan: %4s ino: %8lu icount: %d pagecache: %8lu %3luGB,%3luMB,%3luKB pid: %-6u comm: %s path: %s\n", 
                     node->devname, node->ino, node->icount, node->pagecount, gb, mb, kb, node->pid, node->comm, node->abspath);
             } else if (mb != 0) {
-                printk("pgscan: %4s ino: %8lu icount: %d pagecache: %8lu %4luGB,%4luMB,%4luKB pid: %8u comm: %s path: %s\n", 
+                printk("pgscan: %4s ino: %8lu icount: %d pagecache: %8lu %3luGB,%3luMB,%3luKB pid: %-6u comm: %s path: %s\n", 
                     node->devname, node->ino, node->icount, node->pagecount, gb, mb, kb, node->pid, node->comm, node->abspath);
             } else if (kb != 0) {
-                printk("pgscan: %4s ino: %8lu icount: %d pagecache: %8lu %4luGB,%4luMb,%4luKB pid: %8u comm: %s path: %s\n", 
+                printk("pgscan: %4s ino: %8lu icount: %d pagecache: %8lu %3luGB,%3luMb,%3luKB pid: %-6u comm: %s path: %s\n", 
                     node->devname, node->ino, node->icount, node->pagecount, gb, mb, kb, node->pid, node->comm, node->abspath);
             }
         }
@@ -207,8 +207,10 @@ int scan_file_inode(const void *v, struct file *f, unsigned fd)
             pgc->pid = tsk->pid;
             memcpy(pgc->comm, tsk->comm, TASK_COMM_LEN);
         }
-        //printk("path = %s, ino = %lu fd: %u devname: %s com: %s nrpage： %d\n", pgc->abspath, pgc->ino, fd, 
-        //             pgc->devname, tsk->comm, pgc->pagecount);
+#if 0
+        printk("path = %s, ino = %lu fd: %u devname: %s com: %s nrpage： %d\n", pgc->abspath, pgc->ino, fd, 
+                     pgc->devname, tsk->comm, pgc->pagecount);
+#endif
         if (pgc)
             order_list_add(pgc);
         
@@ -281,7 +283,7 @@ int get_kernel_not_export_function_and_data(void)
         printk("iterate_supers     = 0x%p\n", iterate_supers_function);
         return -1;
     }
-    printk("inode_sb_list_lock     = 0x%p\n", iterate_supers_function);
+    printk("iterate_supers         = 0x%p\n", iterate_supers_function);
 
     return 0;
 }
