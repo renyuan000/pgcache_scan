@@ -4,7 +4,7 @@ MODNAME=pgcache_scan
 
 
 obj-m:=${MODNAME}.o
-${MODNAME}-objs:= kernel.o sysctl.o
+${MODNAME}-objs+= kernel.o sysctl.o cache_scan.o
 
 KDIR:=/lib/modules/$(shell uname -r)/build
 DEFE = -Wall -g
