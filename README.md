@@ -39,7 +39,7 @@ advanced use:
     echo 50 > /proc/sys/vm/pgcache_scan/pgcache_scan_top_n
     ......................
 
-  file inode is deleted but used:
+  file inode is deleted but being used:
   
     echo 1 > /proc/sys/vm/pgcache_scan/pgcache_scan_file_deleted_but_used
 
