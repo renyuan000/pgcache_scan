@@ -14,6 +14,7 @@ extern void print_top_n(int n);
 extern int sysctl_pgcache_scan_top_n;
 extern int sysctl_pgcache_scan_mode;
 extern int sysctl_pgcache_scan_debug_level;
+extern int sysctl_pgcache_scan_file_deleted_but_used;
 
 extern void pgcache_scan_sysctl_register(void);
 extern void pgcache_scan_sysctl_unregister(void);

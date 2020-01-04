@@ -14,12 +14,15 @@ static int scan_top_min = 0;
 static int scan_top_max = 0x7fffffff;
 static int scan_mode_min  = 0;
 static int scan_mode_max  = 2;
+static int scan_deleted_min  = 0;
+static int scan_deleted_max  = 1;
 static int debug_level_min = 0;
 static int debug_level_max = 7;
 
-int sysctl_pgcache_scan_top_n = 0;
-int sysctl_pgcache_scan_mode = 0;
-int sysctl_pgcache_scan_debug_level = 0;
+int sysctl_pgcache_scan_top_n        = 0;
+int sysctl_pgcache_scan_mode         = 0;
+int sysctl_pgcache_scan_debug_level  = 0;
+int sysctl_pgcache_scan_file_deleted_but_used = 0;
 
 int scan_caches_sysctl_handler(struct ctl_table *table, int write,
 	void __user *buffer, size_t *length, loff_t *ppos);
@@ -42,6 +45,15 @@ static struct ctl_table pgcache_scan_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1         = &scan_mode_min,
 		.extra2         = &scan_mode_max
+	},
+	{
+		.procname	= "pgcache_scan_file_deleted_but_used",
+		.data		= &sysctl_pgcache_scan_file_deleted_but_used,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1         = &scan_deleted_min,
+		.extra2         = &scan_deleted_max
 	},
 	{
 		.procname	= "debug_output_level",

@@ -14,19 +14,30 @@ use:
 
 advanced use:    
 
+  process open file's inode:
     echo 0 > /proc/sys/vm/pgcache_scan/pgcache_scan_mode
-       or
-    echo 1 > /proc/sys/vm/pgcache_scan/pgcache_scan_mode
-       or
-    echo 2 > /proc/sys/vm/pgcache_scan/pgcache_scan_mode
-    notice: 0 is default
 
+       or
+  inode on supper_block:
+    echo 1 > /proc/sys/vm/pgcache_scan/pgcache_scan_mode
+
+       or
+  open file's inode and inode on supper_block:
+    echo 2 > /proc/sys/vm/pgcache_scan/pgcache_scan_mode
+
+  notice: 0 is default
+
+  print top n list to dmesg:
     echo 10 > /proc/sys/vm/pgcache_scan/pgcache_scan_top_n
        or
     echo 20 > /proc/sys/vm/pgcache_scan/pgcache_scan_top_n
        or
     echo 50 > /proc/sys/vm/pgcache_scan/pgcache_scan_top_n
     ......................
+
+  file inode is deleted but used:
+    echo 1 > /proc/sys/vm/pgcache_scan/pgcache_scan_file_deleted_but_used
+
 
     dmesg
 
