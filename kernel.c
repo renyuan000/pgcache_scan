@@ -35,9 +35,11 @@ void order_list_add(pgcount_node_t *new)
     list_for_each_entry_safe(node, tmp, &ordered_list, list) {
         if (new->pagecount > node->pagecount) {
             list_add(&new->list, node->list.prev);
-            break;
+            return;
         } 
     }
+
+    list_add_tail(&new->list, &ordered_list);
 
     return;
 }
@@ -61,8 +63,8 @@ void order_list_clear(void)
 void print_top_n(int n)
 {
     int count = 0;
-    int gb = 0, mb = 0, kb = 0;
-    unsigned long bytes = 0UL;
+    uint64_t gb = 0UL, mb = 0UL, kb = 0UL;
+    uint64_t bytes = 0UL;
     pgcount_node_t *node = NULL, *tmp = NULL;
 
     if (list_empty(&ordered_list)) {
@@ -77,15 +79,16 @@ void print_top_n(int n)
             gb  = bytes / G;
             mb  = (bytes - (gb * G)) / M;
             kb  = (bytes - (gb * G) - (mb * M)) / K; 
+            
             if (gb != 0) {
-                printk("%s %s ino: %lu\ticount: %d\tpagecache: %luGB,%luMB\n", "pgscan:", 
-                    node->devname, node->ino, node->icount, gb, mb);
+                printk("pgscan: %4s ino: %8lu icount: %d pagecache: %8lu %4luGB,%4luMB,%4luKB pid: %8u comm: %s path: %s\n", 
+                    node->devname, node->ino, node->icount, node->pagecount, gb, mb, kb, node->pid, node->comm, node->abspath);
             } else if (mb != 0) {
-                printk("%s %s ino: %lu\ticount: %d\tpagecache: %luMB,%luKB\n", "pgscan:", 
-                    node->devname, node->ino, node->icount, mb, kb);
+                printk("pgscan: %4s ino: %8lu icount: %d pagecache: %8lu %4luGB,%4luMB,%4luKB pid: %8u comm: %s path: %s\n", 
+                    node->devname, node->ino, node->icount, node->pagecount, gb, mb, kb, node->pid, node->comm, node->abspath);
             } else if (kb != 0) {
-                printk("%s %s ino: %lu\ticount: %d\tpagecache: %luKB\n", "pgscan:", 
-                    node->devname, node->ino, node->icount, (bytes/K));
+                printk("pgscan: %4s ino: %8lu icount: %d pagecache: %8lu %4luGB,%4luMb,%4luKB pid: %8u comm: %s path: %s\n", 
+                    node->devname, node->ino, node->icount, node->pagecount, gb, mb, kb, node->pid, node->comm, node->abspath);
             }
         }
     }
@@ -101,7 +104,7 @@ static void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg)
     spin_lock(inode_sb_list_lock);
     list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
         if (pgc == NULL) {
-            pgc = kzalloc((sizeof(pgcount_node_t) + PATH_MAX), GFP_KERNEL);
+            pgc = kzalloc((sizeof(pgcount_node_t)), GFP_KERNEL);
             if (pgc == NULL) {
                 printk("kmalloc failed, nomem");
                 goto out;
@@ -170,35 +173,77 @@ static int count_open_files(struct fdtable *fdt)
 	i = (i + 1) * BITS_PER_LONG;
 	return i;
 }
-/*
-scan_process_inodes_pagecache(void)
+
+int scan_file_inode(const void *v, struct file *f, unsigned fd)
+{
+    char *p = NULL;
+    struct address_space *mapping = NULL; 
+    pgcount_node_t *pgc = NULL;
+    struct super_block *sb = NULL;
+    const struct task_struct *tsk = v;
+
+    if (f && f->f_inode) {
+        //iget(f->f_inode);
+        mapping = f->f_inode->i_mapping;
+        if (mapping->nrpages == 0)
+            return 0;
+
+        pgc = kzalloc((sizeof(pgcount_node_t) + PATH_MAX + 11), GFP_KERNEL);
+        if (pgc == NULL) 
+            return -ENOMEM;
+        pgc->abspath = (char *)(pgc + 1);
+        p = d_path(&f->f_path, pgc->abspath, (PATH_MAX + 11));
+        pgc->ino = f->f_inode->i_ino;
+        pgc->abspath = p;
+        if (f->f_inode->i_sb) {
+            sb = f->f_inode->i_sb;
+            if (sb && sb->s_bdev && sb->s_bdev->bd_disk)
+            snprintf(pgc->devname, sizeof(pgc->devname), "%s%d",  sb->s_bdev->bd_disk->disk_name, 
+                               sb->s_bdev->bd_part->partno);
+        }
+        pgc->pagecount = mapping->nrpages;
+        pgc->icount = atomic_read(&f->f_inode->i_count);
+        if (tsk) {
+            pgc->pid = tsk->pid;
+            memcpy(pgc->comm, tsk->comm, TASK_COMM_LEN);
+        }
+        //printk("path = %s, ino = %lu fd: %u devname: %s com: %s nrpage： %d\n", pgc->abspath, pgc->ino, fd, 
+        //             pgc->devname, tsk->comm, pgc->pagecount);
+        if (pgc)
+            order_list_add(pgc);
+        
+        //iput(f->f_inode);
+    }
+
+    return 0;
+}
+ 
+int scan_process_inodes_pagecache(void)
 {
     struct task_struct *p = NULL;
-    struct fdtable *fdt = NULL;
-    const struct cred *cred;
-    struct file *file = NULL;
-    pid_t ppid, tpid;
+    //struct fdtable *fdt = NULL;
+    //const struct cred *cred;
+    //pid_t ppid, tpid;
 
     rcu_read_lock();
     for_each_process(p) {
         if ((p == &init_task) || (p == current)) {
             continue;
         }
-        cred = get_task_cred(p);
+        //cred = get_task_cred(p);
 	task_lock(p);
         if (p->files) {
-            spin_lock(&p->files->file_lock);
-            fdt = files_fdtable(p->files);
-
-            spin_unlock(&p->files->file_lock);
+            iterate_fd(p->files, 1, scan_file_inode, p);
         }
 	task_unlock(p);
 
-	put_cred(cred);
+//	put_cred(cred);
     }
     rcu_read_unlock();
+
+    return 0;
 }
-*/
+
 
 
 /* Lookup the address for this symbol. Returns 0 if not found. */
@@ -252,7 +297,8 @@ static __init int init(void)
     if (get_kernel_not_export_function_and_data() != 0) 
         return -1;
 
-    iterate_supers_function(scan_inodes_pagecache_one_sb, NULL);
+    //iterate_supers_function(scan_inodes_pagecache_one_sb, NULL);
+    scan_process_inodes_pagecache();
     print_top_n(100);
     //tcpspeed_sysctl_register();
     printk("Pgcache scan say: hello !!!\n");

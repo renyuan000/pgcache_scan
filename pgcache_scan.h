@@ -23,8 +23,10 @@ typedef struct {
     uint64_t ino;
     uint32_t pagecount;
     uint32_t icount;
+    uint32_t pid;
     char devname[64];
-    char abspath[0];
+    char comm[TASK_COMM_LEN];
+    char *abspath;
 } pgcount_node_t;
 
 #endif
