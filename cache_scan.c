@@ -17,11 +17,11 @@ iterate_supers_addr iterate_supers_function;
 
 
 
-LIST_HEAD(ordered_list);
-
+static LIST_HEAD(ordered_list);
+static DEFINE_SPINLOCK(ordered_list_lock);
 
 void order_list_clear(void);
-void print_top_n(int n);
+void print_top_num(int n);
 void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg);
 int scan_file_inode(const void *v, struct file *f, unsigned fd);
 int scan_caches_sysctl_handler(struct ctl_table *table, int write,
@@ -55,10 +55,12 @@ void order_list_clear(void)
 {
     pgcount_node_t *node = NULL, *tmp = NULL;
 
+    spin_lock(&ordered_list_lock);
     list_for_each_entry_safe(node, tmp, &ordered_list, list) {
         list_del(&node->list);
         kfree(node);
     }
+    spin_unlock(&ordered_list_lock);
 
     return;
 }
@@ -67,39 +69,44 @@ void order_list_clear(void)
 #define M (1024 * (K))
 #define G (1024 * (M))
 
-void print_top_n(int n)
+void print_top_num(int num)
 {
     int count = 0;
     uint64_t gb = 0UL, mb = 0UL, kb = 0UL;
     uint64_t bytes = 0UL;
-    pgcount_node_t *node = NULL, *tmp = NULL;
+    pgcount_node_t *n = NULL, *tmp = NULL;
 
     if (list_empty(&ordered_list)) {
         printk("ordered_list is empty !\n");
-        return;
+	goto out;
     }
 
+    spin_lock(&ordered_list_lock);
     printk("\n"); 
-    list_for_each_entry_safe(node, tmp, &ordered_list, list) {
-        if (count++ < n) {
-            bytes = node->pagecount * PAGE_SIZE;
+    list_for_each_entry_safe(n, tmp, &ordered_list, list) {
+        if (count++ < num) {
+            bytes = n->pagecount * PAGE_SIZE;
             gb  = bytes / G;
             mb  = (bytes - (gb * G)) / M;
             kb  = (bytes - (gb * G) - (mb * M)) / K; 
             
             if (gb != 0) {
-                printk("pgscan: %4s ino: %8llu icount: %u pagecache: %8llu %3lluGB,%3lluMB,%3lluKB pid: %-6u comm: %s path: %s\n", 
-                    node->devname, node->ino, node->icount, node->pagecount, gb, mb, kb, node->pid, node->comm, node->abspath);
+                printk("pgscan: %6s ino: %10llu icount: %u pgcache: %8llu %3lluGB,%3lluMB,%3lluKB isz: %llu pid: %-6u comm: %s path: %s\n", 
+                    n->devname, n->ino, n->icount, n->pagecount, gb, mb, kb, n->size, n->pid, n->comm, n->abspath);
             } else if (mb != 0) {
-                printk("pgscan: %4s ino: %8llu icount: %u pagecache: %8llu %3lluGB,%3lluMB,%3lluKB pid: %-6u comm: %s path: %s\n", 
-                    node->devname, node->ino, node->icount, node->pagecount, gb, mb, kb, node->pid, node->comm, node->abspath);
+                printk("pgscan: %6s ino: %10llu icount: %u pgcache: %8llu %3lluGB,%3lluMB,%3lluKB isz: %llu pid: %-6u comm: %s path: %s\n", 
+                    n->devname, n->ino, n->icount, n->pagecount, gb, mb, kb, n->size, n->pid, n->comm, n->abspath);
             } else if (kb != 0) {
-                printk("pgscan: %4s ino: %8llu icount: %u pagecache: %8llu %3lluGB,%3lluMb,%3lluKB pid: %-6u comm: %s path: %s\n", 
-                    node->devname, node->ino, node->icount, node->pagecount, gb, mb, kb, node->pid, node->comm, node->abspath);
+                printk("pgscan: %6s ino: %10llu icount: %u pgcache: %8llu %3lluGB,%3lluMb,%3lluKB isz: %llu pid: %-6u comm: %s path: %s\n", 
+                    n->devname, n->ino, n->icount, n->pagecount, gb, mb, kb, n->size, n->pid, n->comm, n->abspath);
             }
         }
     }
     printk("\n"); 
+
+out:
+    spin_unlock(&ordered_list_lock);
+    return;    
 }
 
 void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg)
@@ -108,7 +115,8 @@ void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg)
     pgcount_node_t *pgc = NULL;
     struct address_space *mapping = NULL;
     //struct dentry *de   = NULL;
-   
+  
+    spin_lock(&ordered_list_lock); 
     spin_lock(inode_sb_list_lock);
     list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
         if (pgc == NULL) {
@@ -132,6 +140,7 @@ void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg)
             pgc->pagecount = mapping->nrpages;
             pgc->icount = atomic_read(&inode->i_count);
         } else {
+            snprintf(pgc->devname, sizeof(pgc->devname), "(null)");
             //printk("%s ino: %ul\tnrpages: %ul\n", __FUNCTION__, inode->i_ino, mapping->nrpages);
         }
         
@@ -154,6 +163,7 @@ void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg)
 
 out:
     spin_unlock(inode_sb_list_lock);
+    spin_unlock(&ordered_list_lock); 
 
     return;
 }
@@ -176,38 +186,51 @@ static int count_open_files(struct fdtable *fdt)
 
 int scan_file_inode(const void *v, struct file *f, unsigned fd)
 {
+    int ret = 0;
     char *p = NULL;
+   struct inode *inode = NULL; 
     struct address_space *mapping = NULL; 
     pgcount_node_t *pgc = NULL;
     struct super_block *sb = NULL;
     const struct task_struct *tsk = v;
 
-    if (f && f->f_inode) {
-        //iget(f->f_inode);
-        mapping = f->f_inode->i_mapping;
+    if (!f) 
+        return 0;
+
+    //spin_lock(&f->f_lock); 
+    inode = f->f_mapping->host; //f->f_inode only is cached 
+    if (inode) {
+        //iget(inode);
+        mapping = inode->i_mapping;
         if (mapping->nrpages == 0)
-            return 0;
+            goto out;
 
         if (sysctl_pgcache_scan_file_deleted_but_used) {
-            if (!((f->f_inode->i_nlink == 0) && (atomic_read(&f->f_inode->i_count) != 0))) {
-                return 0;
+            if (!((inode->i_nlink == 0) && (atomic_read(&inode->i_count) != 0))) {
+                goto out;
             }
         }
         pgc = kzalloc((sizeof(pgcount_node_t) + PATH_MAX + 11), GFP_KERNEL);
-        if (pgc == NULL) 
-            return -ENOMEM;
+        if (pgc == NULL) {
+            ret = -ENOMEM;
+            goto out;
+        }
         pgc->abspath = (char *)(pgc + 1);
         p = d_path(&f->f_path, pgc->abspath, (PATH_MAX + 11));
-        pgc->ino = f->f_inode->i_ino;
+        pgc->ino = inode->i_ino;
+        pgc->size = i_size_read(inode);
         pgc->abspath = p;
-        if (f->f_inode->i_sb) {
-            sb = f->f_inode->i_sb;
-            if (sb && sb->s_bdev && sb->s_bdev->bd_disk)
-            snprintf(pgc->devname, sizeof(pgc->devname), "%s%d",  sb->s_bdev->bd_disk->disk_name, 
+        if (inode->i_sb) {
+            sb = inode->i_sb;
+            if (sb && sb->s_bdev && sb->s_bdev->bd_disk) {
+                snprintf(pgc->devname, sizeof(pgc->devname), "%s%d",  sb->s_bdev->bd_disk->disk_name, 
                                sb->s_bdev->bd_part->partno);
+            } else {
+                snprintf(pgc->devname, sizeof(pgc->devname), "(null)");
+            }
         }
         pgc->pagecount = mapping->nrpages;
-        pgc->icount = atomic_read(&f->f_inode->i_count);
+        pgc->icount = atomic_read(&inode->i_count);
         if (tsk) {
             pgc->pid = tsk->pid;
             memcpy(pgc->comm, tsk->comm, TASK_COMM_LEN);
@@ -216,12 +239,14 @@ int scan_file_inode(const void *v, struct file *f, unsigned fd)
         printk("path = %s, ino = %lu fd: %u devname: %s com: %s nrpage： %d\n", pgc->abspath, pgc->ino, fd, 
                      pgc->devname, tsk->comm, pgc->pagecount);
 #endif
-        if (pgc)
+        if (pgc) {
             order_list_add(pgc);
+        }
         
-        //iput(f->f_inode);
+        //iput(inode);
     }
 
+out:
     return 0;
 }
  
@@ -240,7 +265,9 @@ int scan_process_inodes_pagecache(void)
         //cred = get_task_cred(p);
 	task_lock(p);
         if (p->files) {
+            spin_lock(&ordered_list_lock); 
             iterate_fd(p->files, 1, scan_file_inode, p);
+            spin_unlock(&ordered_list_lock); 
         }
 	task_unlock(p);
 
@@ -267,18 +294,18 @@ int scan_caches_sysctl_handler(struct ctl_table *table, int write,
             case 0:
                 order_list_clear();
                 scan_process_inodes_pagecache();
-                print_top_n(sysctl_pgcache_scan_top_n);
+                print_top_num(sysctl_pgcache_scan_top_n);
                 break;
             case 1:
                 order_list_clear();
                 iterate_supers_function(scan_inodes_pagecache_one_sb, NULL);
-                print_top_n(sysctl_pgcache_scan_top_n);
+                print_top_num(sysctl_pgcache_scan_top_n);
                 break;
             case 2:
                 order_list_clear();
                 iterate_supers_function(scan_inodes_pagecache_one_sb, NULL);
                 scan_process_inodes_pagecache();
-                print_top_n(sysctl_pgcache_scan_top_n);
+                print_top_num(sysctl_pgcache_scan_top_n);
                 break;
             default:
                 break;

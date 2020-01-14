@@ -84,7 +84,7 @@ static __init int init(void)
 
     iterate_supers_function(scan_inodes_pagecache_one_sb, NULL);
     scan_process_inodes_pagecache();
-    print_top_n(20);
+    print_top_num(20);
     pgcache_scan_sysctl_register();
     printk("Pgcache scan say: hello !!!\n");
     return 0;

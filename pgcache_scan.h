@@ -18,6 +18,7 @@ typedef struct {
     uint64_t pagecount;
     uint32_t icount;
     pid_t    pid;
+    loff_t   size;
     char devname[64];
     char comm[TASK_COMM_LEN];
     char *abspath;

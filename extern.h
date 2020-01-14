@@ -9,7 +9,7 @@ extern int get_kallsyms_lookup_name_function(void);
 extern int scan_process_inodes_pagecache(void);
 extern void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg);
 extern void order_list_clear(void);
-extern void print_top_n(int n);
+extern void print_top_num(int num);
 
 extern int sysctl_pgcache_scan_top_n;
 extern int sysctl_pgcache_scan_mode;
