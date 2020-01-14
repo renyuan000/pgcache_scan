@@ -38,13 +38,13 @@ advanced use:
        or
     echo 50 > /proc/sys/vm/pgcache_scan/pgcache_scan_top_n
     ......................
+    dmesg
 
   file inode is deleted but being used:
   
     echo 1 > /proc/sys/vm/pgcache_scan/pgcache_scan_file_deleted_but_used
 
     echo 10 > /proc/sys/vm/pgcache_scan/pgcache_scan_top_n
-
 
     dmesg
 
