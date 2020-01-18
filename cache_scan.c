@@ -89,15 +89,15 @@ void print_top_num(int num)
             gb  = bytes / G;
             mb  = (bytes - (gb * G)) / M;
             kb  = (bytes - (gb * G) - (mb * M)) / K; 
-            
+
             if (gb != 0) {
-                printk("pgscan: %6s ino: %10llu icount: %u pgcache: %8llu %3lluGB,%3lluMB,%3lluKB isz: %llu pid: %-6u comm: %s path: %s\n", 
+                printk("pgscan: %6s ino: %10llu icount: %u nrpage: %8llu %3lluGB,%3lluMB,%3lluKB isz: %llu pid: %-6u comm: %s path: %s\n", 
                     n->devname, n->ino, n->icount, n->pagecount, gb, mb, kb, n->size, n->pid, n->comm, n->abspath);
             } else if (mb != 0) {
-                printk("pgscan: %6s ino: %10llu icount: %u pgcache: %8llu %3lluGB,%3lluMB,%3lluKB isz: %llu pid: %-6u comm: %s path: %s\n", 
+                printk("pgscan: %6s ino: %10llu icount: %u nrpage: %8llu %3lluGB,%3lluMB,%3lluKB isz: %llu pid: %-6u comm: %s path: %s\n", 
                     n->devname, n->ino, n->icount, n->pagecount, gb, mb, kb, n->size, n->pid, n->comm, n->abspath);
             } else if (kb != 0) {
-                printk("pgscan: %6s ino: %10llu icount: %u pgcache: %8llu %3lluGB,%3lluMb,%3lluKB isz: %llu pid: %-6u comm: %s path: %s\n", 
+                printk("pgscan: %6s ino: %10llu icount: %u nrpage: %8llu %3lluGB,%3lluMb,%3lluKB isz: %llu pid: %-6u comm: %s path: %s\n", 
                     n->devname, n->ino, n->icount, n->pagecount, gb, mb, kb, n->size, n->pid, n->comm, n->abspath);
             }
         }
