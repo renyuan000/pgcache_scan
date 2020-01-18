@@ -8,7 +8,7 @@
 #include "pgcache_scan.h"
 
 MODULE_AUTHOR("renyuan");
-MODULE_DESCRIPTION("XXXXXX");
+MODULE_DESCRIPTION("scan pagecache, and scan file-deleted which is being openned !! ");
 MODULE_LICENSE("GPL");
 
 
@@ -82,9 +82,9 @@ static __init int init(void)
     if (get_kernel_not_export_function_and_data() != 0) 
         return -1;
 
-    iterate_supers_function(scan_inodes_pagecache_one_sb, NULL);
-    scan_process_inodes_pagecache();
-    print_top_num(20);
+//    iterate_supers_function(scan_inodes_pagecache_one_sb, NULL);
+//    scan_process_inodes_pagecache();
+//    print_top_num(20);
     pgcache_scan_sysctl_register();
     printk("Pgcache scan say: hello !!!\n");
     return 0;
