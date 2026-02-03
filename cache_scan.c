@@ -20,6 +20,30 @@ iterate_supers_addr iterate_supers_function;
 static LIST_HEAD(ordered_list);
 static DEFINE_SPINLOCK(ordered_list_lock);
 
+static void fill_devname(struct super_block *sb, char *buf, size_t len)
+{
+    if (!buf || len == 0)
+        return;
+    if (sb && sb->s_bdev && sb->s_bdev->bd_disk) {
+        if (sb->s_bdev->bd_part && sb->s_bdev->bd_part->partno) {
+            snprintf(buf, len, "%s%d", sb->s_bdev->bd_disk->disk_name,
+                     sb->s_bdev->bd_part->partno);
+        } else {
+            snprintf(buf, len, "%s", sb->s_bdev->bd_disk->disk_name);
+        }
+        return;
+    }
+    if (sb && sb->s_id[0] != '\0') {
+        snprintf(buf, len, "%s", sb->s_id);
+        return;
+    }
+    if (sb && sb->s_type && sb->s_type->name) {
+        snprintf(buf, len, "%s", sb->s_type->name);
+        return;
+    }
+    snprintf(buf, len, "(unknown)");
+}
+
 void order_list_clear(void);
 void print_top_num(int n);
 void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg);
@@ -123,28 +147,23 @@ void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg)
             pgc = kzalloc((sizeof(pgcount_node_t)), GFP_KERNEL);
             if (pgc == NULL) {
                 printk("kmalloc failed, nomem");
-                goto out;
+                continue;
             }
         }
 
         spin_lock(&inode->i_lock);
         mapping = inode->i_mapping;
-        if (inode->i_state & (I_FREEING | I_WILL_FREE | I_NEW) || mapping->nrpages == 0) {
+        if (inode->i_state & (I_FREEING | I_WILL_FREE | I_NEW) || !mapping || mapping->nrpages == 0) {
             spin_unlock(&inode->i_lock);
             continue;
         }
-	if (sb->s_bdev && sb->s_bdev->bd_part && sb->s_bdev->bd_disk) {
-            pgc->ino = inode->i_ino;
-            snprintf(pgc->devname, sizeof(pgc->devname), "%s%d",  sb->s_bdev->bd_disk->disk_name, 
-                               sb->s_bdev->bd_part->partno);
-            pgc->pagecount = mapping->nrpages;
-            pgc->icount = atomic_read(&inode->i_count);
-        } else {
-            snprintf(pgc->devname, sizeof(pgc->devname), "(null)");
-            //printk("%s ino: %ul\tnrpages: %ul\n", __FUNCTION__, inode->i_ino, mapping->nrpages);
-        }
+        pgc->ino = inode->i_ino;
+        pgc->pagecount = mapping->nrpages;
+        pgc->icount = atomic_read(&inode->i_count);
+        pgc->size = i_size_read(inode);
         
         spin_unlock(&inode->i_lock);
+        fill_devname(sb, pgc->devname, sizeof(pgc->devname));
 /*
         de = d_find_alias(inode);
         if (de) {
@@ -222,12 +241,9 @@ int scan_file_inode(const void *v, struct file *f, unsigned fd)
         pgc->abspath = p;
         if (inode->i_sb) {
             sb = inode->i_sb;
-            if (sb && sb->s_bdev && sb->s_bdev->bd_disk) {
-                snprintf(pgc->devname, sizeof(pgc->devname), "%s%d",  sb->s_bdev->bd_disk->disk_name, 
-                               sb->s_bdev->bd_part->partno);
-            } else {
-                snprintf(pgc->devname, sizeof(pgc->devname), "(null)");
-            }
+            fill_devname(sb, pgc->devname, sizeof(pgc->devname));
+        } else {
+            snprintf(pgc->devname, sizeof(pgc->devname), "(null)");
         }
         pgc->pagecount = mapping->nrpages;
         pgc->icount = atomic_read(&inode->i_count);
