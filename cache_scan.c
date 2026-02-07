@@ -20,6 +20,9 @@ iterate_supers_addr iterate_supers_function;
 static LIST_HEAD(ordered_list);
 static DEFINE_SPINLOCK(ordered_list_lock);
 
+static char path_unknown[] = "-";
+static char comm_unknown[] = "-";
+
 static void fill_devname(struct super_block *sb, char *buf, size_t len)
 {
     if (!buf || len == 0)
@@ -42,6 +45,37 @@ static void fill_devname(struct super_block *sb, char *buf, size_t len)
         return;
     }
     snprintf(buf, len, "(unknown)");
+}
+
+static void format_bytes(char *buf, size_t len, u64 bytes)
+{
+    const char *unit = "B";
+    u64 div = 1;
+    u64 val = bytes;
+    u64 frac = 0;
+
+    if (bytes >= (1ULL << 40)) {
+        unit = "TiB";
+        div = 1ULL << 40;
+    } else if (bytes >= (1ULL << 30)) {
+        unit = "GiB";
+        div = 1ULL << 30;
+    } else if (bytes >= (1ULL << 20)) {
+        unit = "MiB";
+        div = 1ULL << 20;
+    } else if (bytes >= (1ULL << 10)) {
+        unit = "KiB";
+        div = 1ULL << 10;
+    }
+
+    if (div == 1) {
+        snprintf(buf, len, "%llu B", bytes);
+        return;
+    }
+
+    val = bytes / div;
+    frac = (bytes % div) * 10 / div;
+    snprintf(buf, len, "%llu.%llu %s", val, frac, unit);
 }
 
 void order_list_clear(void);
@@ -96,9 +130,12 @@ void order_list_clear(void)
 void print_top_num(int num)
 {
     int count = 0;
-    uint64_t gb = 0UL, mb = 0UL, kb = 0UL;
-    uint64_t bytes = 0UL;
+    u64 bytes = 0;
     pgcount_node_t *n = NULL, *tmp = NULL;
+    char cache_buf[32];
+    char size_buf[32];
+    const char *path = NULL;
+    const char *comm = NULL;
 
     if (list_empty(&ordered_list)) {
         printk("ordered_list is empty !\n");
@@ -106,24 +143,18 @@ void print_top_num(int num)
     }
 
     spin_lock(&ordered_list_lock);
-    printk("\n"); 
+    printk("\n");
+    printk("pgscan: top %d entries (sorted by cached pages)\n", num);
     list_for_each_entry_safe(n, tmp, &ordered_list, list) {
         if (count++ < num) {
             bytes = n->pagecount * PAGE_SIZE;
-            gb  = bytes / G;
-            mb  = (bytes - (gb * G)) / M;
-            kb  = (bytes - (gb * G) - (mb * M)) / K; 
-
-            if (gb != 0) {
-                printk("pgscan: %6s ino: %10llu icount: %u nrpage: %8llu %3lluGB,%3lluMB,%3lluKB isz: %llu\t pid: %-6u\t comm: %s path: %s\n", 
-                    n->devname, n->ino, n->icount, n->pagecount, gb, mb, kb, n->size, n->pid, n->comm, n->abspath);
-            } else if (mb != 0) {
-                printk("pgscan: %6s ino: %10llu icount: %u nrpage: %8llu %3lluGB,%3lluMB,%3lluKB isz: %llu\t pid: %-6u\t comm: %s path: %s\n", 
-                    n->devname, n->ino, n->icount, n->pagecount, gb, mb, kb, n->size, n->pid, n->comm, n->abspath);
-            } else if (kb != 0) {
-                printk("pgscan: %6s ino: %10llu icount: %u nrpage: %8llu %3lluGB,%3lluMb,%3lluKB isz: %llu\t pid: %-6u\t comm: %s path: %s\n", 
-                    n->devname, n->ino, n->icount, n->pagecount, gb, mb, kb, n->size, n->pid, n->comm, n->abspath);
-            }
+            format_bytes(cache_buf, sizeof(cache_buf), bytes);
+            format_bytes(size_buf, sizeof(size_buf), (u64)n->size);
+            path = n->abspath ? n->abspath : path_unknown;
+            comm = n->comm[0] ? n->comm : comm_unknown;
+            printk("pgscan[%d]: dev=%s ino=%llu icount=%u pages=%llu cache=%s size=%s pid=%u comm=%s path=%s\n",
+                count, n->devname, n->ino, n->icount, n->pagecount,
+                cache_buf, size_buf, n->pid, comm, path);
         }
     }
     printk("\n"); 
@@ -164,6 +195,8 @@ void scan_inodes_pagecache_one_sb(struct super_block *sb, void *arg)
         
         spin_unlock(&inode->i_lock);
         fill_devname(sb, pgc->devname, sizeof(pgc->devname));
+        pgc->abspath = path_unknown;
+        memcpy(pgc->comm, comm_unknown, sizeof(comm_unknown));
 /*
         de = d_find_alias(inode);
         if (de) {
@@ -238,7 +271,10 @@ int scan_file_inode(const void *v, struct file *f, unsigned fd)
         p = d_path(&f->f_path, pgc->abspath, (PATH_MAX + 11));
         pgc->ino = inode->i_ino;
         pgc->size = i_size_read(inode);
-        pgc->abspath = p;
+        if (IS_ERR(p))
+            pgc->abspath = path_unknown;
+        else
+            pgc->abspath = p;
         if (inode->i_sb) {
             sb = inode->i_sb;
             fill_devname(sb, pgc->devname, sizeof(pgc->devname));

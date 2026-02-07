@@ -26,5 +26,6 @@
 #include <linux/genhd.h>
 #include <linux/backing-dev.h>
 #include <linux/sysctl.h>
+#include <linux/err.h>
 
 #endif
